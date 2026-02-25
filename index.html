@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Wall Size Calculator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main class="card">
+    <h1>Video Wall Size Calculator</h1>
+
+    <section class="form-section">
+      <h2>Cabinet type</h2>
+      <div class="cabinet-type-group">
+        <label class="radio-label">
+          <input type="radio" name="cabinetType" value="16:9" checked>
+          <span>16:9 (600 × 337.5 mm)</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="cabinetType" value="1:1">
+          <span>1:1 (500 × 500 mm)</span>
+        </label>
+      </div>
+
+      <h2>Parameters</h2>
+      <p class="hint">Select exactly two parameters.</p>
+      <div class="inputs-grid">
+        <div class="input-row">
+          <label class="input-label">
+            <input type="checkbox" id="input-aspectRatio" data-input="aspectRatio">
+            <span>Aspect ratio</span>
+          </label>
+          <select id="aspectRatio" disabled aria-label="Aspect ratio preset">
+            <option value="16:9">16:9</option>
+            <option value="4:3">4:3</option>
+            <option value="1:1">1:1</option>
+          </select>
+        </div>
+        <div class="input-row">
+          <label class="input-label">
+            <input type="checkbox" id="input-height" data-input="height">
+            <span>Height</span>
+          </label>
+          <input type="number" id="height" step="any" placeholder="—" disabled aria-label="Height">
+        </div>
+        <div class="input-row">
+          <label class="input-label">
+            <input type="checkbox" id="input-width" data-input="width">
+            <span>Width</span>
+          </label>
+          <input type="number" id="width" step="any" placeholder="—" disabled aria-label="Width">
+        </div>
+        <div class="input-row">
+          <label class="input-label">
+            <input type="checkbox" id="input-diagonal" data-input="diagonal">
+            <span>Diagonal</span>
+          </label>
+          <input type="number" id="diagonal" step="any" placeholder="—" disabled aria-label="Diagonal">
+        </div>
+      </div>
+
+      <div class="unit-row">
+        <span class="unit-label">Unit</span>
+        <div class="unit-toggle">
+          <button type="button" data-unit="mm" class="unit-btn active">mm</button>
+          <button type="button" data-unit="m" class="unit-btn">m</button>
+          <button type="button" data-unit="ft" class="unit-btn">ft</button>
+          <button type="button" data-unit="in" class="unit-btn">in</button>
+        </div>
+      </div>
+
+      <button type="button" id="applyBtn" class="btn btn-primary">Apply</button>
+    </section>
+
+    <section id="resultsSection" class="results-section" aria-live="polite" hidden>
+      <h2>Results</h2>
+      <div id="resultsContainer" class="results-container"></div>
+    </section>
+
+    <section id="confirmationSection" class="confirmation-section" aria-live="polite" hidden>
+      <h2>Chosen configuration</h2>
+      <div id="confirmationContent"></div>
+    </section>
+  </main>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
