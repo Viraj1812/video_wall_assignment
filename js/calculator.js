@@ -115,11 +115,69 @@ function generateCandidates(targetWidthMm, targetHeightMm, cabinet) {
   });
 }
 
+/** Tolerance for exact match (mm) */
+const TOLERANCE_MM = 0.01;
+
+/**
+ * Determine how to classify lower/upper based on which two inputs the user chose.
+ * - Aspect ratio + Height: use height only (so upper has more rows when target height increases).
+ * - Aspect ratio + Width: use width only.
+ * - Otherwise (width+height, width+diagonal, height+diagonal, aspect+diagonal): use both dimensions.
+ * @param {string[]} activeInputs
+ * @param {Config} config
+ * @param {{ widthMm: number, heightMm: number }} target
+ * @returns {{ isLower: boolean, isUpper: boolean, isExact: boolean }}
+ */
+function classifyConfig(activeInputs, config, target) {
+  const hasHeight = activeInputs.includes('height');
+  const hasWidth = activeInputs.includes('width');
+
+  if (hasHeight && !hasWidth) {
+    // Aspect ratio + Height: lower = height at or below target, upper = height at or above
+    const isLower = config.heightMm <= target.heightMm + TOLERANCE_MM;
+    const isUpper = config.heightMm >= target.heightMm - TOLERANCE_MM;
+    const isExact = Math.abs(config.heightMm - target.heightMm) < TOLERANCE_MM;
+    return { isLower, isUpper, isExact };
+  }
+  if (hasWidth && !hasHeight) {
+    // Aspect ratio + Width: lower = width at or below target, upper = width at or above
+    const isLower = config.widthMm <= target.widthMm + TOLERANCE_MM;
+    const isUpper = config.widthMm >= target.widthMm - TOLERANCE_MM;
+    const isExact = Math.abs(config.widthMm - target.widthMm) < TOLERANCE_MM;
+    return { isLower, isUpper, isExact };
+  }
+  // Both dimensions (or diagonal + one, or aspect + diagonal): lower = both at or below, upper = both at or above
+  const isLower = config.widthMm <= target.widthMm + TOLERANCE_MM && config.heightMm <= target.heightMm + TOLERANCE_MM;
+  const isUpper = config.widthMm >= target.widthMm - TOLERANCE_MM && config.heightMm >= target.heightMm - TOLERANCE_MM;
+  const isExact =
+    Math.abs(config.widthMm - target.widthMm) < TOLERANCE_MM && Math.abs(config.heightMm - target.heightMm) < TOLERANCE_MM;
+  return { isLower, isUpper, isExact };
+}
+
+/**
+ * For "upper" we want strictly above exact when there was an exact match.
+ * @param {string[]} activeInputs
+ * @param {Config} config
+ * @param {{ widthMm: number, heightMm: number }} target
+ * @returns {boolean}
+ */
+function isStrictlyAbove(activeInputs, config, target) {
+  const hasHeight = activeInputs.includes('height');
+  const hasWidth = activeInputs.includes('width');
+  if (hasHeight && !hasWidth) return config.heightMm > target.heightMm + TOLERANCE_MM;
+  if (hasWidth && !hasHeight) return config.widthMm > target.widthMm + TOLERANCE_MM;
+  return (
+    config.widthMm > target.widthMm + TOLERANCE_MM || config.heightMm > target.heightMm + TOLERANCE_MM
+  );
+}
+
 /**
  * Compute closest lower and upper cabinet configurations.
- * Lower = best-scoring config with final diagonal <= target diagonal (or exact match).
- * Upper = best-scoring config with final diagonal >= target diagonal.
- * If exact match exists, it is lower; next larger is upper.
+ * Lower/upper are defined by the constrained dimension(s):
+ * - Aspect ratio + Height: lower = height <= target, upper = height >= target (so cols and rows both change, e.g. 7x7 vs 8x8).
+ * - Aspect ratio + Width: same by width.
+ * - Other pairs: lower = both width and height <= target, upper = both >= target.
+ * If exact match exists, it is lower; upper is the next strictly larger.
  *
  * @param {{ cabinetType: '16:9'|'1:1', activeInputs: string[], valuesMm: object, aspectRatioPreset: string }} input
  * @returns {{ lower: Config|null, upper: Config|null }}
@@ -138,8 +196,8 @@ export function computeConfigurations(input) {
     return { lower: null, upper: null };
   }
   const candidates = generateCandidates(target.widthMm, target.heightMm, cabinet);
+  const activeInputs = input.activeInputs;
 
-  const targetDiagonal = target.diagonalMm;
   /** @type {Config|null} */
   let bestLower = null;
   let bestLowerScore = Infinity;
@@ -155,9 +213,9 @@ export function computeConfigurations(input) {
       { widthMm: config.widthMm, heightMm: config.heightMm, diagonalMm: config.diagonalMm, aspectRatio: config.aspectRatio },
       target
     );
+    const { isLower, isUpper, isExact } = classifyConfig(activeInputs, config, target);
 
-    // Consider exact match (diagonal within small tolerance)
-    if (Math.abs(config.diagonalMm - targetDiagonal) < 0.01) {
+    if (isExact) {
       if (exactMatch === null || s < score(
         { widthMm: exactMatch.widthMm, heightMm: exactMatch.heightMm, diagonalMm: exactMatch.diagonalMm, aspectRatio: exactMatch.aspectRatio },
         target
@@ -166,28 +224,25 @@ export function computeConfigurations(input) {
       }
     }
 
-    if (config.diagonalMm <= targetDiagonal) {
-      if (s < bestLowerScore) {
-        bestLowerScore = s;
-        bestLower = config;
-      }
+    if (isLower && s < bestLowerScore) {
+      bestLowerScore = s;
+      bestLower = config;
     }
-    if (config.diagonalMm >= targetDiagonal) {
-      if (s < bestUpperScore) {
-        bestUpperScore = s;
-        bestUpper = config;
-      }
+    if (isUpper && s < bestUpperScore) {
+      bestUpperScore = s;
+      bestUpper = config;
     }
   }
 
-  // If we found an exact match, it becomes lower; upper is the next larger (or same if no larger)
+  // Exact match becomes lower; upper must be strictly above (e.g. 8x8 when exact was 7x7 for aspect+height)
   if (exactMatch) {
     bestLower = exactMatch;
-    if (bestUpper && bestUpper.diagonalMm <= exactMatch.diagonalMm + 0.01) {
-      // Upper should be strictly above exact; expand to nearby larger grids if needed
-      const fromCandidates = candidates
-        .map(({ cols, rows }) => toConfig(cols, rows, cabinet))
-        .filter(c => c.diagonalMm > exactMatch.diagonalMm + 0.01)
+    const upperStrictlyAbove = bestUpper && isStrictlyAbove(activeInputs, bestUpper, target);
+    if (!upperStrictlyAbove && bestUpper) {
+      // Find smallest config strictly above exact
+      const allConfigs = candidates.map(({ cols, rows }) => toConfig(cols, rows, cabinet));
+      const above = allConfigs
+        .filter(c => isStrictlyAbove(activeInputs, c, target))
         .sort((a, b) => score(
           { widthMm: a.widthMm, heightMm: a.heightMm, diagonalMm: a.diagonalMm, aspectRatio: a.aspectRatio },
           target
@@ -195,32 +250,29 @@ export function computeConfigurations(input) {
           { widthMm: b.widthMm, heightMm: b.heightMm, diagonalMm: b.diagonalMm, aspectRatio: b.aspectRatio },
           target
         ));
-      let above = fromCandidates[0] || null;
-      if (!above) {
-        const extra = [];
-        for (let dc = 1; dc <= 2; dc++) {
-          for (let dr = 0; dr <= 2; dr++) {
-            const c = Math.min(MAX_COLS, exactMatch.cols + dc);
-            const r = Math.min(MAX_ROWS, exactMatch.rows + dr);
-            extra.push(toConfig(c, r, cabinet));
-          }
-        }
-        for (let dr = 1; dr <= 2; dr++) {
+      if (above.length > 0) bestUpper = above[0];
+    }
+    if (bestUpper && !isStrictlyAbove(activeInputs, bestUpper, target)) {
+      // Expand search for a strictly larger config (e.g. 8 rows when exact has 7)
+      const extra = [];
+      for (let dc = 0; dc <= 2; dc++) {
+        for (let dr = 0; dr <= 2; dr++) {
+          if (dc === 0 && dr === 0) continue;
+          const c = Math.min(MAX_COLS, exactMatch.cols + dc);
           const r = Math.min(MAX_ROWS, exactMatch.rows + dr);
-          extra.push(toConfig(exactMatch.cols, r, cabinet));
+          extra.push(toConfig(c, r, cabinet));
         }
-        const sorted = extra
-          .filter(c => c.diagonalMm > exactMatch.diagonalMm + 0.01)
-          .sort((a, b) => score(
-            { widthMm: a.widthMm, heightMm: a.heightMm, diagonalMm: a.diagonalMm, aspectRatio: a.aspectRatio },
-            target
-          ) - score(
-            { widthMm: b.widthMm, heightMm: b.heightMm, diagonalMm: b.diagonalMm, aspectRatio: b.aspectRatio },
-            target
-          ));
-        above = sorted[0] || null;
       }
-      if (above) bestUpper = above;
+      const above = extra
+        .filter(c => isStrictlyAbove(activeInputs, c, target))
+        .sort((a, b) => score(
+          { widthMm: a.widthMm, heightMm: a.heightMm, diagonalMm: a.diagonalMm, aspectRatio: a.aspectRatio },
+          target
+        ) - score(
+          { widthMm: b.widthMm, heightMm: b.heightMm, diagonalMm: b.diagonalMm, aspectRatio: b.aspectRatio },
+          target
+        ));
+      if (above.length > 0) bestUpper = above[0];
     }
   }
 
