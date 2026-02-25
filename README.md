@@ -19,22 +19,13 @@ A modular **Video Wall Size Calculator** built with HTML, CSS, and vanilla JavaS
 
 ---
 
-## How to Run
+## Architecture
 
-1. **Try the live app:** [https://video-wall-assignment.onrender.com/](https://video-wall-assignment.onrender.com/)
-2. **Or run locally:** Clone or download this project, then open in a browser:
-   - **Option A:** Double-click `index.html` or open it from your file manager.
-   - **Option B:** Use a local server (recommended for module loading on some setups):
-     ```bash
-     # Python 3
-     python3 -m http.server 8000
-     # Then open http://localhost:8000
-     ```
-     ```bash
-     # Node (npx)
-     npx serve .
-     ```
-3. Select **cabinet type**, check **exactly two parameters**, enter values, choose **unit**, then click **Apply**.
+![System architecture diagram](architecture.png)
+
+- **Single entry:** `index.html` → `js/app.js` (module).
+- **State:** Only `js/state.js` holds mutable app state; all other modules use its getters/setters.
+- **Flow:** User actions → `app.js` updates state and/or calls `calculator.js` → `renderer.js` and `gridRenderer.js` update the DOM from state.
 
 ---
 
@@ -54,14 +45,6 @@ A modular **Video Wall Size Calculator** built with HTML, CSS, and vanilla JavaS
 | `js/calculator.js` | **Core logic.** Converts inputs to target dimensions in mm, generates candidate grids (cols × rows), scores by dimension + ratio error, returns closest lower and upper configurations. |
 | `js/renderer.js` | Syncs DOM with state: form (enable/disable inputs, show values in current unit), unit toggle, result cards, grid placeholders, confirmation section. |
 | `js/gridRenderer.js` | Given a container and `{ cols, rows }`, builds a CSS Grid of cells for visual preview. |
-
----
-
-## Architecture (Data Flow)
-
-- **Single entry:** `index.html` → `js/app.js` (module).
-- **State:** Only `js/state.js` holds mutable app state; all other modules use its getters/setters.
-- **Flow:** User actions → `app.js` updates state and/or calls `calculator.js` → `renderer.js` and `gridRenderer.js` update the DOM from state.
 
 ---
 
